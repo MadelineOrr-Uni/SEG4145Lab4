@@ -88,8 +88,10 @@ char hold[6];
 int holdlen = 0;
 int motion = 0;
 
-int alarmgraceperiod = 5000; // 5 seconds - should be 60 seconds
+int alarmgraceperiod = 5; // 5 seconds - should be 60 seconds
+char alarmgracestring[3];
 int alarmgraceflag = 0; //0 for alarm, 1 for arming grace, 2 for movement detected grace
+int wipescreenflag = 0;
 
 int armed;
 /* USER CODE END PV */
@@ -210,6 +212,7 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
   /* USER CODE END 3 */
+  }
 }
 
 /**
@@ -429,10 +432,12 @@ void StartKeypadTask(void *argument)
 	 if (armed == 0) {
 
 		 if (key == '*') { // Submitted
+			 wipescreenflag = 1;
 			if (masterlen >= 4 && masterlen <= 6) {
 				armed = 1; // arm the system
 
 				//Allow grace period for user to walk away
+				alarmgraceperiod = 5;
 				alarmgraceflag = 1;
 			} else {
 				continue;
@@ -445,6 +450,7 @@ void StartKeypadTask(void *argument)
 	 } else {
 
 		 if (key == '*') { // Submitted
+			 wipescreenflag = 1;
 			 int match = 1;
 			 if (masterlen != holdlen) {
 				 match = 0;
@@ -510,27 +516,38 @@ void StartMotionSensor(void *argument)
 
 		 //Arming grace period
 		 if (alarmgraceflag == 1) {
-			HAL_Delay(alarmgraceperiod);
+			if (alarmgraceperiod == 0) {
+				alarmgraceflag = 0;
+			} else {
+				HAL_Delay(1000);
+				alarmgraceperiod--;
+			}
 
-			//Grace period over - set flag to detect movement
-			alarmgraceflag = 2;
 			continue;
 		}
 
-		motion = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_15);
-    	if (motion == 1) { // Detected motion
-    		//Detection grace period
-			 if (alarmgraceflag == 2) {
-				HAL_Delay(alarmgraceperiod);
-
-				//Grace period over - reset flag, sound alarm on next motion
-				alarmgraceflag = 0;
-				continue;
+		if (alarmgraceflag == 0) {
+			motion = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_15);
+			if (motion == 1) { // Detected motion
+				alarmgraceperiod = 5;
+				alarmgraceflag = 2;
 			}
 
-    		//Activate buzzer
-    		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, 1);
-    	}
+		}
+
+		if (alarmgraceflag == 2) {
+			//Detection grace period
+			if (alarmgraceperiod == 0) {
+				//Activate buzzer
+				HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, 1);
+			} else {
+				HAL_Delay(1000);
+				alarmgraceperiod--;
+			}
+
+			continue;
+
+		}
 
     }
 
@@ -556,7 +573,10 @@ void StartOutputTask(void *argument)
   for(;;)
   {
 
-	SSD1306_Clear();
+	  if (wipescreenflag == 1) {
+		  SSD1306_Clear();
+		  wipescreenflag = 0;
+	  }
 
 	if (armed == 0) {
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
@@ -576,10 +596,14 @@ void StartOutputTask(void *argument)
 		SSD1306_Puts("ARMED", &Font_11x18,1);
 		SSD1306_GotoXY(0,30);
 		SSD1306_Puts(asterisk, &Font_11x18,1);
+		SSD1306_GotoXY(100,30);
+		sprintf(alarmgracestring,"%d", alarmgraceperiod);
+		SSD1306_Puts(alarmgracestring, &Font_11x18,1);
 		SSD1306_UpdateScreen();
 
 	}
-	HAL_Delay(500);
+
+	HAL_Delay(1000);
 
 
   }
