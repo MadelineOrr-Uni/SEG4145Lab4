@@ -505,7 +505,7 @@ void StartDefaultTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	  if (armed) {
+	  if (armed == 0) {
 		  __HAL_TIM_SET_COMPARE(&htim2,TIM_CHANNEL_2, 250);
 	  } else {
 		  __HAL_TIM_SET_COMPARE(&htim2,TIM_CHANNEL_2, 750);
